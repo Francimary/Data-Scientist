@@ -1,0 +1,203 @@
+# library
+library(readr)
+library(rpart)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+library(ggplot2)
+library(dplyr)
+library(ggvis)
+library(plotrix)
+library(caret)
+library(e1071)
+
+
+Data <- read.csv("C://Users//Raymundo//Documents//Franci//MestradoCEFET//4 MIneração de Dados//Trabalho da Base de Dados//HR_comma_sep.csv")
+
+Ativos_Inativos <- table(Data$left)
+Ativos <- Ativos_Inativos[1]
+Inativos <- Ativos_Inativos[2]
+
+# Gráfico de pizza, % Ativos/Inativos
+
+lbl <- c("0=Ativos", "1=Inativos")
+x <- c(Data$left)
+
+pie(table(x),
+    main="Gráfico Ativos/Inativos", col =c("green", "blue"))
+text(locator(n=1),
+     paste(round(prop.table(table(x))[1],
+                 digits=2)*100,"%"), col="black")
+text(locator(n=1),
+     paste(round(prop.table(table(x))[2],
+                 digits=2)*100,"%"), col="black")
+
+legend("topright", lbl, cex = 0.8, col = as.integer(x))
+
+## Histogramas de: Nível de Satisfação, Última Avaliação e Média de Horas Mensais
+## para os Inativos apenas
+
+hr_hist <- Data %>% filter(left==1)
+
+par(mfrow=c(1,3))
+hist(hr_hist$satisfaction_level,col="green", xlim = c(0,1), ylim=c(0,800), main = "Nível de Satisfação") 
+hist(hr_hist$last_evaluation,col="blue", xlim = c(0.4,1), ylim=c(0,800), main = "Última Avaliação")
+hist(hr_hist$average_montly_hours,col="red", xlim= c(100,350), ylim = c(0,800),main = "Média de Horas Mensal")
+
+par(mfrow=c(1,3))
+hist(hr_hist$Work_accident, col="#3090C7", main = "Acidentes de Trabalho")
+hr_hist$salary = factor(hr_hist$salary, levels=c("low", "medium", "high"))
+plot(hr_hist$salary, col="#3090C7",  main = "Faixa Salarial")
+hist(hr_hist$number_project, col="#3090C7", main = "Num de Projetos")
+
+# Empregados Inativos por Departamento
+
+Data_dept<-Data %>%
+  select(sales,left)%>%
+  group_by(sales)%>%
+  filter(left == 1)
+ 
+# rename sales as Dept   
+Data_dept <- rename(Data_dept, Dept= sales)
+
+
+# plot  employees by Department Left=1
+
+ggplot(Data_dept, aes(x=Dept,col=Dept,fill=Dept))+
+  geom_bar()+
+  scale_x_discrete("Departamento") + 
+  scale_y_continuous("Num de Empregados")+
+  ggtitle("Num de Empregados Inativos por Depto") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# plot  employees by Department Left=0
+Data_dept<-Data %>%
+  select(sales,left)%>%
+  group_by(sales)%>%
+  filter(left == 0)
+
+# rename sales as Dept   
+Data_dept <- rename(Data_dept, Dept= sales)
+
+ggplot(Data_dept, aes(x=Dept,col=Dept,fill=Dept))+
+  geom_bar()+
+  scale_x_discrete("Departamento") + 
+  scale_y_continuous("Num de Empregados")+
+  ggtitle("Num de Empregados Ativos por Depto") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# plot Employee satisfaction by Last evaluation
+hr_hist <- Data %>% filter(left==1)
+
+grafico <- ggplot(hr_hist,  aes(x = hr_hist$satisfaction_level, y = hr_hist$last_evaluation)) 
+grafico + geom_point() +
+          ggtitle("Satisfação X Avaliação") 
+
+# plot Employee satisfaction by Last evaluation, from employees in company
+hr_hist <- Data %>% filter(left==0)
+
+grafico <- ggplot(hr_hist,  aes(x = hr_hist$satisfaction_level, y = hr_hist$last_evaluation)) 
+grafico + geom_point() +
+  ggtitle("Satisfação X Avaliação") 
+          
+
+
+# Employee time_spend_company
+hr_hist <- Data %>% filter(left==1)
+
+barplot(table(hr_hist$time_spend_company), col=c("blue","red"),
+        
+        ylim=c(0,1800),
+        space=.2, width=c(.2,.2),
+        main="Tempo na Empresa",
+        xlab="Qtde de Anos", ylab="Quantidade")
+
+
+# plot employee statisfaction by Dept
+
+Data_sats<-Data %>%
+  group_by(sales,time_spend_company)%>%
+  summarise(satisfaction=mean(satisfaction_level))
+  
+ggplot(Data_sats, aes(x=time_spend_company,y=satisfaction, col=time_spend_company,fill=time_spend_company))+
+  geom_line(size=1)+
+  facet_grid(~sales)+
+  scale_x_continuous("Tenure of Employee") + 
+  scale_y_continuous("Satisfaction level")+
+  ggtitle("Employee satisfaction by Tenure")
+
+# salary range by Department
+
+Data$salary = factor(Data$salary, levels=c("low", "medium", "high"))
+
+ggplot(Data, aes(x=salary,col=salary, fill=salary))+
+  geom_bar()+
+  facet_grid(~sales)+
+  scale_x_discrete("Faixa Salarial ") + 
+  scale_y_continuous("Num de Empregados")+
+  ggtitle("Empregados por Faixa Salarial")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# last evalution vs satisfaction
+
+
+Data_evaluation<-Data %>%
+  group_by(sales,time_spend_company,salary,left,number_project)%>%
+  summarise(satisfaction=mean(satisfaction_level),evaluation=mean(last_evaluation))
+
+ggplot(Data_evaluation, aes(x=evaluation,y=satisfaction,col=sales))+
+  geom_jitter()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~sales)+
+  ggtitle("Satisfação X Última Avaliação por Área")
+
+## Employes the company should be concerned and retained
+hr_leaving_people <- Data %>% filter(left==1)
+hr_good_leaved_people <- hr_leaving_people %>% filter(last_evaluation >= 0.70 & time_spend_company >= 4 & number_project >= 4)
+nrow(hr_good_leaved_people)
+
+
+## similar above, now with employes still in company
+hr_ok <- Data %>% filter(left==0)
+hr_good_leaving_people <- hr_ok %>% filter(last_evaluation >= 0.70 & time_spend_company >= 4 & number_project >= 4)
+nrow(hr_good_leaving_people)
+
+
+# Shuffle the dataset, name the result shuffled
+n <- nrow(Data)
+shuffled <- Data[sample(n),]
+
+# Split the data in train and test
+train_indices<-1:round(0.8 * n)
+train<-shuffled[train_indices,]
+test_indices<-(round(0.8 * n) + 1):n
+test<-shuffled[test_indices,]
+
+#set seed 
+
+set.seed(1)
+
+# tree model of staff that have left
+tree<- rpart(left~.,train,method = "class", parms = list(split = "information"))
+
+
+# Draw the decision tree
+fancyRpartPlot(tree)
+
+# Prune the tree: pruned
+pruned<-prune(tree,cp=0.01)
+
+
+# Predict the values of the test set: pred
+pred <- predict(pruned, test, type = "class")
+
+
+# Construct the confusion matrix: conf
+conf<-table(test$left,pred)
+
+conf
+
+# Print out the accuracy
+sum(diag(conf))/sum(conf)
+
+tree
